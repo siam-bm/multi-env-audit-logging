@@ -86,6 +86,6 @@ class JsonFileLog extends FileLog
      */
     protected function _getFilename($level): string
     {
-        return 'app.json';
+        return $this->_config['file'] ?? 'app.json';
     }
 }
