@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use Cake\Event\EventInterface;
 use Cake\Log\Log;
 
 /**
@@ -23,6 +24,19 @@ class ProductsController extends AppController
         parent::initialize();
         // Generate or get trace ID for distributed tracing
         $this->traceId = $this->request->getHeader('X-Trace-Id')[0] ?? uniqid('prod_', true);
+    }
+
+    /**
+     * Require an authenticated user before any product action.
+     *
+     * @param \Cake\Event\EventInterface $event Controller event.
+     * @return \Cake\Http\Response|null
+     */
+    public function beforeFilter(EventInterface $event)
+    {
+        parent::beforeFilter($event);
+
+        return $this->requireLogin();
     }
 
     /**

@@ -62,6 +62,11 @@ return function (RouteBuilder $routes): void {
          */
         $builder->connect('/pages/*', 'Pages::display');
 
+        // Clean auth + audit-viewer URLs.
+        $builder->connect('/login', ['controller' => 'Users', 'action' => 'login']);
+        $builder->connect('/logout', ['controller' => 'Users', 'action' => 'logout']);
+        $builder->connect('/audit-logs', ['controller' => 'AuditLogs', 'action' => 'index']);
+
         /*
          * Connect catchall routes for all controllers.
          *

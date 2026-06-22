@@ -7,6 +7,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cakephp-dev
+    # Ensure CakePHP's tmp (schema cache, sessions) and logs are writable on the
+    # bind mount before Apache starts, then run Apache.
+    command: bash -c "mkdir -p tmp/cache/models tmp/cache/persistent tmp/sessions && chmod -R 777 tmp logs && apache2-foreground"
     ports:
       - "8081:80"
     environment:
@@ -54,6 +57,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cakephp-staging
+    command: bash -c "mkdir -p tmp/cache/models tmp/cache/persistent tmp/sessions && chmod -R 777 tmp logs && apache2-foreground"
     ports:
       - "8082:80"
     environment:
@@ -101,6 +105,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: cakephp-prod
+    command: bash -c "mkdir -p tmp/cache/models tmp/cache/persistent tmp/sessions && chmod -R 777 tmp logs && apache2-foreground"
     ports:
       - "8083:80"
     environment:

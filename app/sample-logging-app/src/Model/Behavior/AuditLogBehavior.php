@@ -4,30 +4,33 @@ declare(strict_types=1);
 namespace App\Model\Behavior;
 
 use ArrayObject;
+use Cake\Core\Configure;
 use Cake\Datasource\EntityInterface;
+use Cake\Datasource\FactoryLocator;
 use Cake\Event\EventInterface;
-use Cake\ORM\Behavior;
-use Cake\ORM\Table;
-use Cake\Log\Log;
 use Cake\Http\ServerRequest;
+use Cake\Log\Log;
+use Cake\ORM\Behavior;
 
 /**
- * AuditLog behavior - Centralized logging system for all CRUD operations
+ * AuditLog behavior - centralized logging for all CRUD operations.
+ *
+ * Writes a human/JSON record to the 'audit' log scope (file -> Fluent Bit ->
+ * OpenSearch) AND persists a structured row to the audit_logs table so the
+ * in-app log viewer can reconstruct per-user and per-entity flows.
  */
 class AuditLogBehavior extends Behavior
 {
     /**
-     * Default configuration
-     *
      * @var array
      */
     protected $_defaultConfig = [
         'logScopes' => ['audit', 'application'],
-        'fields' => [], // If empty, logs all fields
-        'ignoreFields' => ['created', 'modified', 'id'],
+        'fields' => [],
+        'ignoreFields' => ['created', 'modified', 'id', 'password'],
         'logLevel' => 'info',
         'includeRequestData' => true,
-        'includeSchema' => false
+        'includeSchema' => false,
     ];
 
     /**
@@ -41,7 +44,7 @@ class AuditLogBehavior extends Behavior
     private $request;
 
     /**
-     * Initialize behavior
+     * Initialize behavior.
      *
      * @param array $config Configuration
      * @return void
@@ -49,22 +52,54 @@ class AuditLogBehavior extends Behavior
     public function initialize(array $config): void
     {
         parent::initialize($config);
-        
-        // Generate trace ID for distributed tracing
+
         $this->traceId = uniqid('audit_', true);
-        
-        // Get request object if available
+
         if (class_exists('\Cake\Http\ServerRequestFactory')) {
             $this->request = \Cake\Http\ServerRequestFactory::fromGlobals();
         }
     }
 
     /**
-     * Before save callback - logs create/update attempts
+     * Resolve the acting user from Configure (set by AppController::beforeFilter).
      *
-     * @param EventInterface $event Event
-     * @param EntityInterface $entity Entity being saved
-     * @param ArrayObject $options Options
+     * @return array{id: int|null, name: string}
+     */
+    private function actor(): array
+    {
+        $user = Configure::read('Audit.actor');
+
+        return [
+            'id' => $user['id'] ?? null,
+            'name' => $user['name'] ?? 'system',
+        ];
+    }
+
+    /**
+     * Build the request metadata block.
+     *
+     * @return array
+     */
+    private function requestMeta(): array
+    {
+        if (!$this->getConfig('includeRequestData') || !$this->request) {
+            return [];
+        }
+
+        return [
+            'ip' => $this->request->clientIp(),
+            'user_agent' => $this->request->getHeader('User-Agent')[0] ?? 'Unknown',
+            'method' => $this->request->getMethod(),
+            'url' => $this->request->getRequestTarget(),
+        ];
+    }
+
+    /**
+     * Before save - logs the attempt and stashes original/changed data for afterSave.
+     *
+     * @param \Cake\Event\EventInterface $event Event
+     * @param \Cake\Datasource\EntityInterface $entity Entity being saved
+     * @param \ArrayObject $options Options
      * @return void
      */
     public function beforeSave(EventInterface $event, EntityInterface $entity, ArrayObject $options): void
@@ -73,170 +108,219 @@ class AuditLogBehavior extends Behavior
         $isNew = $entity->isNew();
         $action = $isNew ? 'create' : 'update';
         $tableName = $table->getTable();
-        
-        // Store the isNew state for afterSave callback
+        $actor = $this->actor();
+
         $options['_isNew'] = $isNew;
-        
+
         $logData = [
             'trace_id' => $this->traceId,
             'action' => "{$tableName}.{$action}.attempt",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
-            'timestamp' => date('Y-m-d H:i:s')
+            'user_id' => $actor['id'],
+            'user_name' => $actor['name'],
+            'timestamp' => date('Y-m-d H:i:s'),
         ];
 
-        if (!$entity->isNew()) {
-            // For updates, get original values
-            $originalEntity = $table->get($entity->id);
-            $originalData = $this->extractEntityData($originalEntity);
+        if (!$isNew) {
+            $originalData = $this->extractEntityData($table->get($entity->id));
             $newData = $this->extractEntityData($entity);
-            
-            // Calculate changes
             $changes = $this->calculateChanges($originalData, $newData);
-            
+
             $logData['entity_id'] = $entity->id;
             $logData['original_values'] = $originalData;
             $logData['new_values'] = $newData;
             $logData['changed_fields'] = array_keys($changes);
             $logData['changes'] = $changes;
+
+            // Stash for afterSave (DB persistence).
+            $options['_auditOriginal'] = $originalData;
+            $options['_auditChanges'] = array_keys($changes);
         } else {
-            // For creates, just log new data
             $logData['new_values'] = $this->extractEntityData($entity);
         }
 
-        // Add request data if configured
-        if ($this->getConfig('includeRequestData') && $this->request) {
-            $logData['request'] = [
-                'ip' => $this->request->clientIp(),
-                'user_agent' => $this->request->getHeader('User-Agent')[0] ?? 'Unknown',
-                'method' => $this->request->getMethod(),
-                'url' => $this->request->getRequestTarget()
-            ];
+        $request = $this->requestMeta();
+        if ($request) {
+            $logData['request'] = $request;
         }
 
         Log::write($this->getConfig('logLevel'), json_encode($logData), $this->getConfig('logScopes'));
     }
 
     /**
-     * After save callback - logs successful save
+     * After save - logs success and persists a structured audit_logs row.
      *
-     * @param EventInterface $event Event
-     * @param EntityInterface $entity Entity that was saved
-     * @param ArrayObject $options Options
+     * @param \Cake\Event\EventInterface $event Event
+     * @param \Cake\Datasource\EntityInterface $entity Entity that was saved
+     * @param \ArrayObject $options Options
      * @return void
      */
     public function afterSave(EventInterface $event, EntityInterface $entity, ArrayObject $options): void
     {
         $table = $event->getSubject();
-        // Check if entity was new before save (for create vs update detection)
-        $wasNew = isset($options['_isNew']) ? $options['_isNew'] : false;
+        $wasNew = $options['_isNew'] ?? false;
         $action = $wasNew ? 'create' : 'update';
         $tableName = $table->getTable();
-        
+        $actor = $this->actor();
+        $newData = $this->extractEntityData($entity);
+
         $logData = [
             'trace_id' => $this->traceId,
             'action' => "{$tableName}.{$action}.success",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
             'entity_id' => $entity->id,
-            'timestamp' => date('Y-m-d H:i:s')
+            'user_id' => $actor['id'],
+            'user_name' => $actor['name'],
+            'timestamp' => date('Y-m-d H:i:s'),
         ];
 
-        if ($action === 'create') {
-            $logData['created_entity'] = $this->extractEntityData($entity);
+        if ($wasNew) {
+            $logData['new_values'] = $newData;
             $logData['message'] = "New {$table->getAlias()} created with ID: {$entity->id}";
         } else {
-            $logData['updated_entity'] = $this->extractEntityData($entity);
+            $logData['original_values'] = $options['_auditOriginal'] ?? [];
+            $logData['new_values'] = $newData;
+            $logData['changed_fields'] = $options['_auditChanges'] ?? [];
             $logData['message'] = "{$table->getAlias()} {$entity->id} updated successfully";
         }
 
-        // Add request data
-        if ($this->getConfig('includeRequestData') && $this->request) {
-            $logData['request'] = [
-                'ip' => $this->request->clientIp(),
-                'user_agent' => $this->request->getHeader('User-Agent')[0] ?? 'Unknown'
-            ];
+        $request = $this->requestMeta();
+        if ($request) {
+            $logData['request'] = $request;
         }
 
-        // Log as info for creates, notice for updates
-        $level = $action === 'create' ? 'info' : 'notice';
+        $level = $wasNew ? 'info' : 'notice';
         Log::write($level, json_encode($logData), $this->getConfig('logScopes'));
+
+        $this->recordToDatabase([
+            'action' => "{$tableName}.{$action}",
+            'table_name' => $tableName,
+            'entity_id' => $entity->id,
+            'user_id' => $actor['id'],
+            'original_values' => $wasNew ? null : ($options['_auditOriginal'] ?? []),
+            'new_values' => $newData,
+            'changed_fields' => $wasNew ? null : ($options['_auditChanges'] ?? []),
+        ]);
     }
 
     /**
-     * Before delete callback - logs deletion attempt
+     * Before delete - logs the deletion attempt.
      *
-     * @param EventInterface $event Event
-     * @param EntityInterface $entity Entity being deleted
-     * @param ArrayObject $options Options
+     * @param \Cake\Event\EventInterface $event Event
+     * @param \Cake\Datasource\EntityInterface $entity Entity being deleted
+     * @param \ArrayObject $options Options
      * @return void
      */
     public function beforeDelete(EventInterface $event, EntityInterface $entity, ArrayObject $options): void
     {
         $table = $event->getSubject();
         $tableName = $table->getTable();
-        
+        $actor = $this->actor();
+
         $logData = [
             'trace_id' => $this->traceId,
             'action' => "{$tableName}.delete.attempt",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
             'entity_id' => $entity->id,
+            'user_id' => $actor['id'],
+            'user_name' => $actor['name'],
             'deleted_data' => $this->extractEntityData($entity),
-            'timestamp' => date('Y-m-d H:i:s')
+            'timestamp' => date('Y-m-d H:i:s'),
         ];
 
-        // Add request data
-        if ($this->getConfig('includeRequestData') && $this->request) {
-            $logData['request'] = [
-                'ip' => $this->request->clientIp(),
-                'user_agent' => $this->request->getHeader('User-Agent')[0] ?? 'Unknown',
-                'method' => $this->request->getMethod()
-            ];
+        $request = $this->requestMeta();
+        if ($request) {
+            $logData['request'] = $request;
         }
 
         Log::warning(json_encode($logData), $this->getConfig('logScopes'));
     }
 
     /**
-     * After delete callback - logs successful deletion
+     * After delete - logs success and persists a structured audit_logs row.
      *
-     * @param EventInterface $event Event
-     * @param EntityInterface $entity Entity that was deleted
-     * @param ArrayObject $options Options
+     * @param \Cake\Event\EventInterface $event Event
+     * @param \Cake\Datasource\EntityInterface $entity Entity that was deleted
+     * @param \ArrayObject $options Options
      * @return void
      */
     public function afterDelete(EventInterface $event, EntityInterface $entity, ArrayObject $options): void
     {
         $table = $event->getSubject();
         $tableName = $table->getTable();
-        
+        $actor = $this->actor();
+        $deleted = $this->extractEntityData($entity);
+
         $logData = [
             'trace_id' => $this->traceId,
             'action' => "{$tableName}.delete.success",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
             'entity_id' => $entity->id,
+            'user_id' => $actor['id'],
+            'user_name' => $actor['name'],
             'message' => "{$table->getAlias()} {$entity->id} deleted successfully",
-            'deleted_entity' => $this->extractEntityData($entity),
-            'timestamp' => date('Y-m-d H:i:s')
+            'deleted_entity' => $deleted,
+            'timestamp' => date('Y-m-d H:i:s'),
         ];
 
-        // Add request data
-        if ($this->getConfig('includeRequestData') && $this->request) {
-            $logData['request'] = [
-                'ip' => $this->request->clientIp(),
-                'user_agent' => $this->request->getHeader('User-Agent')[0] ?? 'Unknown'
-            ];
+        $request = $this->requestMeta();
+        if ($request) {
+            $logData['request'] = $request;
         }
 
         Log::warning(json_encode($logData), $this->getConfig('logScopes'));
+
+        $this->recordToDatabase([
+            'action' => "{$tableName}.delete",
+            'table_name' => $tableName,
+            'entity_id' => $entity->id,
+            'user_id' => $actor['id'],
+            'original_values' => $deleted,
+            'new_values' => null,
+            'changed_fields' => null,
+        ]);
     }
 
     /**
-     * Extract data from entity based on configuration
+     * Persist a structured row to the audit_logs table. Failures are swallowed
+     * so auditing never breaks the underlying operation.
      *
-     * @param EntityInterface $entity Entity to extract data from
+     * @param array $row Row data (action, table_name, entity_id, user_id, ...).
+     * @return void
+     */
+    private function recordToDatabase(array $row): void
+    {
+        try {
+            $auditLogs = FactoryLocator::get('Table')->get('AuditLogs');
+
+            $entity = $auditLogs->newEntity([
+                'trace_id' => $this->traceId,
+                'action' => $row['action'],
+                'table_name' => $row['table_name'],
+                'entity_id' => $row['entity_id'] ?? null,
+                'user_id' => $row['user_id'] ?? null,
+                'ip_address' => $this->request ? $this->request->clientIp() : null,
+                'user_agent' => $this->request ? ($this->request->getHeader('User-Agent')[0] ?? null) : null,
+                'original_values' => isset($row['original_values']) ? json_encode($row['original_values']) : null,
+                'new_values' => isset($row['new_values']) ? json_encode($row['new_values']) : null,
+                'changed_fields' => isset($row['changed_fields']) ? json_encode($row['changed_fields']) : null,
+            ]);
+
+            // checkRules=false so a null user_id (anonymous) never blocks the audit row.
+            $auditLogs->save($entity, ['checkRules' => false, 'atomic' => false]);
+        } catch (\Throwable $e) {
+            Log::error('Audit DB write failed: ' . $e->getMessage(), ['audit']);
+        }
+    }
+
+    /**
+     * Extract data from entity based on configuration.
+     *
+     * @param \Cake\Datasource\EntityInterface $entity Entity to extract data from
      * @return array
      */
     protected function extractEntityData(EntityInterface $entity): array
@@ -246,14 +330,12 @@ class AuditLogBehavior extends Behavior
         $ignoreFields = $this->getConfig('ignoreFields');
 
         if (empty($fields)) {
-            // If no specific fields configured, get all visible properties
             $fields = $entity->getVisible();
         }
 
         foreach ($fields as $field) {
             if (!in_array($field, $ignoreFields) && $entity->has($field)) {
                 $value = $entity->get($field);
-                // Convert objects to string representation
                 if (is_object($value) && method_exists($value, '__toString')) {
                     $value = (string)$value;
                 } elseif ($value instanceof \DateTime) {
@@ -267,7 +349,7 @@ class AuditLogBehavior extends Behavior
     }
 
     /**
-     * Calculate changes between two data sets
+     * Calculate changes between two data sets.
      *
      * @param array $original Original data
      * @param array $new New data
@@ -276,61 +358,23 @@ class AuditLogBehavior extends Behavior
     protected function calculateChanges(array $original, array $new): array
     {
         $changes = [];
-        
+
         foreach ($new as $field => $newValue) {
             $originalValue = $original[$field] ?? null;
-            
-            // Type juggling for comparison
+
             if (is_numeric($originalValue) && is_numeric($newValue)) {
                 $originalValue = (string)$originalValue;
                 $newValue = (string)$newValue;
             }
-            
+
             if ($originalValue !== $newValue) {
                 $changes[$field] = [
                     'before' => $originalValue,
-                    'after' => $newValue
+                    'after' => $newValue,
                 ];
             }
         }
-        
+
         return $changes;
-    }
-
-    /**
-     * Log custom action
-     *
-     * @param string $action Action name
-     * @param EntityInterface $entity Entity
-     * @param array $additionalData Additional data to log
-     * @return void
-     */
-    public function logAction(string $action, EntityInterface $entity, array $additionalData = []): void
-    {
-        $table = $this->_table;
-        $tableName = $table->getTable();
-        
-        $logData = [
-            'trace_id' => $this->traceId,
-            'action' => "{$tableName}.{$action}",
-            'table' => $tableName,
-            'entity_type' => $table->getAlias(),
-            'entity_id' => $entity->id ?? null,
-            'entity_data' => $this->extractEntityData($entity),
-            'timestamp' => date('Y-m-d H:i:s')
-        ];
-
-        // Merge additional data
-        $logData = array_merge($logData, $additionalData);
-
-        // Add request data
-        if ($this->getConfig('includeRequestData') && $this->request) {
-            $logData['request'] = [
-                'ip' => $this->request->clientIp(),
-                'user_agent' => $this->request->getHeader('User-Agent')[0] ?? 'Unknown'
-            ];
-        }
-
-        Log::write($this->getConfig('logLevel'), json_encode($logData), $this->getConfig('logScopes'));
     }
 }

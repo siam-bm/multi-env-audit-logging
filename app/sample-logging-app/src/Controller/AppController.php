@@ -17,6 +17,8 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Cake\Controller\Controller;
+use Cake\Core\Configure;
+use Cake\Event\EventInterface;
 
 /**
  * Application Controller
@@ -31,10 +33,6 @@ class AppController extends Controller
     /**
      * Initialization hook method.
      *
-     * Use this method to add common initialization code like loading components.
-     *
-     * e.g. `$this->loadComponent('FormProtection');`
-     *
      * @return void
      */
     public function initialize(): void
@@ -43,11 +41,43 @@ class AppController extends Controller
 
         $this->loadComponent('RequestHandler');
         $this->loadComponent('Flash');
+    }
 
-        /*
-         * Enable the following component for recommended CakePHP form protection settings.
-         * see https://book.cakephp.org/4/en/controllers/components/form-protection.html
-         */
-        //$this->loadComponent('FormProtection');
+    /**
+     * Runs before every action. Resolves the current logged-in user from the
+     * session, shares it with the views (for the nav bar), and publishes it to
+     * Configure so the AuditLogBehavior can attribute changes to the actor.
+     *
+     * @param \Cake\Event\EventInterface $event Controller event.
+     * @return void
+     */
+    public function beforeFilter(EventInterface $event)
+    {
+        parent::beforeFilter($event);
+
+        $user = $this->getRequest()->getSession()->read('Auth.User');
+
+        // Publish the actor so models (AuditLogBehavior) can record who acted.
+        Configure::write('Audit.actor', $user);
+
+        // Make it available to every template (nav bar etc.).
+        $this->set('currentUser', $user);
+    }
+
+    /**
+     * Redirect to the login page when no user is authenticated. Controllers
+     * that manage data (Products, Users) call this from their beforeFilter.
+     *
+     * @return \Cake\Http\Response|null Redirect response when not logged in.
+     */
+    protected function requireLogin()
+    {
+        if (!$this->getRequest()->getSession()->check('Auth.User')) {
+            $this->Flash->error('Please log in to continue.');
+
+            return $this->redirect(['controller' => 'Users', 'action' => 'login']);
+        }
+
+        return null;
     }
 }
