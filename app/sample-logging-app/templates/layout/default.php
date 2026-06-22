@@ -43,7 +43,7 @@ $cakeDescription = 'CakePHP: the rapid development php framework';
             <a href="<?= $this->Url->build(['controller' => 'Products', 'action' => 'index']) ?>">Products</a>
             <a href="<?= $this->Url->build(['controller' => 'AuditLogs', 'action' => 'index']) ?>"><strong>Audit Logs</strong></a>
             <a href="<?= $this->Url->build(['controller' => 'Pages', 'action' => 'display', 'home']) ?>">Dashboard</a>
-            <a target="_blank" rel="noopener" href="http://<?= h(env('OPENSEARCH_HOST', 'localhost')) ?>:5601">OpenSearch</a>
+            <a target="_blank" rel="noopener" href="http://<?= h(env('OPENSEARCH_HOST', 'localhost')) ?>:5601/app/discover#/?_g=(time:(from:now-7d,to:now))&amp;_a=(index:'logs-audit-star')">OpenSearch Logs</a>
             <?php if (!empty($currentUser)) : ?>
                 <span style="color:#7a7a7a">👤 <?= h($currentUser['name']) ?></span>
                 <a href="<?= $this->Url->build(['controller' => 'Users', 'action' => 'logout']) ?>">Logout</a>
