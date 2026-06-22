@@ -1,0 +1,166 @@
+{
+  "audit_template": {
+    "index_patterns": ["audit-*"],
+    "template": {
+      "settings": {
+        "number_of_shards": 2,
+        "number_of_replicas": 1,
+        "index.lifecycle.name": "audit_policy",
+        "index.lifecycle.rollover_alias": "audit"
+      },
+      "mappings": {
+        "properties": {
+          "@timestamp": {
+            "type": "date"
+          },
+          "environment": {
+            "type": "keyword"
+          },
+          "system": {
+            "type": "keyword"
+          },
+          "action": {
+            "type": "keyword"
+          },
+          "entity_type": {
+            "type": "keyword"
+          },
+          "entity_id": {
+            "type": "long"
+          },
+          "actor_id": {
+            "type": "long"
+          },
+          "actor_type": {
+            "type": "keyword"
+          },
+          "ip_address": {
+            "type": "ip"
+          },
+          "user_agent": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword"
+              }
+            }
+          },
+          "trace_id": {
+            "type": "keyword"
+          },
+          "changes": {
+            "type": "object",
+            "enabled": true
+          },
+          "deleted_data": {
+            "type": "object",
+            "enabled": true
+          }
+        }
+      },
+      "aliases": {
+        "audit": {}
+      }
+    }
+  },
+  "future_production_template": {
+    "index_patterns": ["audit-*-*"],
+    "template": {
+      "settings": {
+        "number_of_shards": 3,
+        "number_of_replicas": 1,
+        "index.lifecycle.name": "production_audit_policy",
+        "index.lifecycle.rollover_alias": "audit_production"
+      },
+      "mappings": {
+        "properties": {
+          "@timestamp": {
+            "type": "date"
+          },
+          "timestamp": {
+            "type": "date"
+          },
+          "system": {
+            "type": "keyword",
+            "fields": {
+              "text": {
+                "type": "text"
+              }
+            }
+          },
+          "environment": {
+            "type": "keyword"
+          },
+          "university": {
+            "type": "keyword"
+          },
+          "actor_id": {
+            "type": "long"
+          },
+          "actor_type": {
+            "type": "keyword"
+          },
+          "action": {
+            "type": "keyword",
+            "fields": {
+              "text": {
+                "type": "text"
+              }
+            }
+          },
+          "entity_type": {
+            "type": "keyword"
+          },
+          "entity_id": {
+            "type": "keyword"
+          },
+          "trace_id": {
+            "type": "keyword"
+          },
+          "request_id": {
+            "type": "keyword"
+          },
+          "ip_address": {
+            "type": "ip"
+          },
+          "user_agent": {
+            "type": "text",
+            "fields": {
+              "keyword": {
+                "type": "keyword"
+              }
+            }
+          },
+          "changes": {
+            "type": "nested",
+            "properties": {
+              "field": {
+                "type": "keyword"
+              },
+              "before": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword"
+                  }
+                }
+              },
+              "after": {
+                "type": "text",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword"
+                  }
+                }
+              }
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "enabled": true
+          }
+        }
+      }
+    }
+  }
+}

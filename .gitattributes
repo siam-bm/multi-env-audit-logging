@@ -1,0 +1,4 @@
+# Force LF line endings. Shell scripts (install.sh) and Fluent Bit configs
+# break if checked out as CRLF.
+* text=auto eol=lf
+*.sh text eol=lf

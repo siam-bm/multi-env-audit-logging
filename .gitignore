@@ -1,0 +1,33 @@
+# Environment / secrets — never commit
+.env
+**/.env
+
+# CakePHP local DB config (contains credentials)
+app/sample-logging-app/config/app_local.php
+
+# Composer dependencies (run: composer install)
+vendor/
+
+# Built distribution packages
+*.zip
+
+# Sensitive leftovers
+**/cookies.txt
+
+# Runtime logs / buffers / caches
+logs/**/*.json
+logs/**/*.log
+**/tmp/*
+*.db
+
+# CakePHP app runtime
+app/sample-logging-app/logs/*
+app/sample-logging-app/tmp/*
+
+# IDE / tooling
+.idea/
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store

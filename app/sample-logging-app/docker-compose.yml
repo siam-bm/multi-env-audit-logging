@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # CakePHP Application
+  app:
+    build: .
+    container_name: sample-logging-app
+    ports:
+      - "8080:80"
+    environment:
+      - APP_NAME=SampleLoggingApp
+      - DEBUG=true
+      - DATABASE_URL=mysql://root:rootpass@db/sample_logging_db
+      - CENTRAL_LOG_SERVER=10.0.2.30
+      - FLUENT_BIT_HTTP_PORT=8888
+      - FLUENT_BIT_FORWARD_PORT=24224
+    volumes:
+      - ./:/var/www/html
+      - ./logs:/var/www/html/logs
+      - ./tmp:/var/www/html/tmp
+    depends_on:
+      - db
+      - fluent-bit
+    networks:
+      - app-network
+
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: sample-logging-db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: sample_logging_db
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app-network
+
+  # Local Fluent Bit Forwarder
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    container_name: sample-logging-forwarder
+    volumes:
+      - ./logs:/logs
+      - ./config/fluent-bit-docker.conf:/fluent-bit/etc/fluent-bit.conf
+    environment:
+      - CENTRAL_SERVER=10.0.2.30
+    networks:
+      - app-network
+    command: /fluent-bit/bin/fluent-bit -c /fluent-bit/etc/fluent-bit.conf
+
+volumes:
+  db_data:
+
+networks:
+  app-network:
+    driver: bridge

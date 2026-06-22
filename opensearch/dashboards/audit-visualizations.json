@@ -1,0 +1,195 @@
+{
+  "visualizations": [
+    {
+      "title": "Audit Logs by Environment",
+      "type": "pie",
+      "query": {
+        "index": "audit-all",
+        "aggs": {
+          "environment_breakdown": {
+            "terms": {
+              "field": "environment",
+              "size": 10
+            }
+          }
+        }
+      },
+      "description": "Distribution of audit logs across dev, staging, and prod environments"
+    },
+    {
+      "title": "Audit Actions Timeline",
+      "type": "line",
+      "query": {
+        "index": "audit-all",
+        "aggs": {
+          "actions_over_time": {
+            "date_histogram": {
+              "field": "@timestamp",
+              "interval": "1h"
+            },
+            "aggs": {
+              "by_action": {
+                "terms": {
+                  "field": "action",
+                  "size": 10
+                }
+              }
+            }
+          }
+        }
+      },
+      "description": "Timeline of audit actions across all environments"
+    },
+    {
+      "title": "Top Actions by Environment",
+      "type": "bar",
+      "query": {
+        "index": "audit-all",
+        "aggs": {
+          "environments": {
+            "terms": {
+              "field": "environment"
+            },
+            "aggs": {
+              "top_actions": {
+                "terms": {
+                  "field": "action",
+                  "size": 5
+                }
+              }
+            }
+          }
+        }
+      },
+      "description": "Most common actions per environment"
+    },
+    {
+      "title": "Active Users",
+      "type": "data_table",
+      "query": {
+        "index": "audit-all",
+        "aggs": {
+          "active_users": {
+            "terms": {
+              "field": "actor_id",
+              "size": 20
+            },
+            "aggs": {
+              "last_action": {
+                "max": {
+                  "field": "@timestamp"
+                }
+              },
+              "action_count": {
+                "value_count": {
+                  "field": "action"
+                }
+              }
+            }
+          }
+        }
+      },
+      "description": "Most active users across all systems"
+    },
+    {
+      "title": "Entity Operations",
+      "type": "heatmap",
+      "query": {
+        "index": "audit-all",
+        "aggs": {
+          "entity_types": {
+            "terms": {
+              "field": "entity_type"
+            },
+            "aggs": {
+              "operations": {
+                "terms": {
+                  "field": "action"
+                }
+              }
+            }
+          }
+        }
+      },
+      "description": "Heatmap of operations per entity type"
+    },
+    {
+      "title": "System Health Monitor",
+      "type": "metric",
+      "queries": [
+        {
+          "label": "Total Audit Logs",
+          "index": "audit-all",
+          "agg": "count"
+        },
+        {
+          "label": "Dev Environment",
+          "index": "audit-dev",
+          "agg": "count"
+        },
+        {
+          "label": "Staging Environment",
+          "index": "audit-staging",
+          "agg": "count"
+        },
+        {
+          "label": "Prod Environment",
+          "index": "audit-prod",
+          "agg": "count"
+        }
+      ],
+      "description": "Key metrics for audit logging system"
+    }
+  ],
+  "dashboard": {
+    "title": "Audit Logging POC Dashboard",
+    "panels": [
+      {
+        "visualization": "Audit Logs by Environment",
+        "position": {"x": 0, "y": 0, "w": 6, "h": 4}
+      },
+      {
+        "visualization": "System Health Monitor",
+        "position": {"x": 6, "y": 0, "w": 6, "h": 4}
+      },
+      {
+        "visualization": "Audit Actions Timeline",
+        "position": {"x": 0, "y": 4, "w": 12, "h": 4}
+      },
+      {
+        "visualization": "Top Actions by Environment",
+        "position": {"x": 0, "y": 8, "w": 6, "h": 4}
+      },
+      {
+        "visualization": "Active Users",
+        "position": {"x": 6, "y": 8, "w": 6, "h": 4}
+      },
+      {
+        "visualization": "Entity Operations",
+        "position": {"x": 0, "y": 12, "w": 12, "h": 4}
+      }
+    ]
+  },
+  "saved_searches": [
+    {
+      "name": "Dev Environment Errors",
+      "query": "environment:dev AND level:error"
+    },
+    {
+      "name": "Production CRUD Operations",
+      "query": "environment:prod AND action:*.create OR action:*.update OR action:*.delete"
+    },
+    {
+      "name": "User Authentication Events",
+      "query": "action:user.login OR action:user.logout OR action:user.register"
+    },
+    {
+      "name": "Recent Admin Actions",
+      "query": "actor_type:admin AND @timestamp:[now-1h TO now]"
+    },
+    {
+      "name": "Cross-Environment Comparison",
+      "query": "action:order.* | stats count by environment"
+    }
+  ]
+}

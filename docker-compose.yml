@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # ==================== DEVELOPMENT ENVIRONMENT ====================
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cakephp-dev
+    ports:
+      - "8081:80"
+    environment:
+      APP_ENV: dev
+      APP_NAME: CakePHP-Audit-Dev
+      SYSTEM_NAME: cakephp-audit
+      DB_HOST: ${DB_HOST:-10.0.2.30}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-sample_logging_db}
+      DB_USERNAME: ${DB_USERNAME:-cakeuser}
+      DB_PASSWORD: ${DB_PASSWORD:-cakepass}
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-10.0.2.30}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+      LOG_INDEX: audit-dev
+    volumes:
+      - ./app/sample-logging-app:/var/www/html
+      - ./config/dev:/var/www/html/config/local:ro
+      - ./logs/dev:/var/www/html/logs
+    networks:
+      - audit-network
+    restart: unless-stopped
+
+  fluentbit-dev:
+    image: fluent/fluent-bit:3.0
+    container_name: fluentbit-dev
+    volumes:
+      - ./logs/dev:/logs:ro
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./fluent-bit/timestamp.lua:/fluent-bit/etc/timestamp.lua:ro
+    environment:
+      APP_ENV: dev
+      SYSTEM_NAME: cakephp-audit
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-10.0.2.30}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+    networks:
+      - audit-network
+    depends_on:
+      - app-dev
+    restart: unless-stopped
+
+  # ==================== STAGING ENVIRONMENT ====================
+  app-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cakephp-staging
+    ports:
+      - "8082:80"
+    environment:
+      APP_ENV: staging
+      APP_NAME: CakePHP-Audit-Staging
+      SYSTEM_NAME: cakephp-audit
+      DB_HOST: ${DB_HOST:-10.0.2.30}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-sample_logging_db}
+      DB_USERNAME: ${DB_USERNAME:-cakeuser}
+      DB_PASSWORD: ${DB_PASSWORD:-cakepass}
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-10.0.2.30}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+      LOG_INDEX: audit-staging
+    volumes:
+      - ./app/sample-logging-app:/var/www/html
+      - ./config/staging:/var/www/html/config/local:ro
+      - ./logs/staging:/var/www/html/logs
+    networks:
+      - audit-network
+    restart: unless-stopped
+
+  fluentbit-staging:
+    image: fluent/fluent-bit:3.0
+    container_name: fluentbit-staging
+    volumes:
+      - ./logs/staging:/logs:ro
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./fluent-bit/timestamp.lua:/fluent-bit/etc/timestamp.lua:ro
+    environment:
+      APP_ENV: staging
+      SYSTEM_NAME: cakephp-audit
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-10.0.2.30}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+    networks:
+      - audit-network
+    depends_on:
+      - app-staging
+    restart: unless-stopped
+
+  # ==================== PRODUCTION TEST ENVIRONMENT ====================
+  app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cakephp-prod
+    ports:
+      - "8083:80"
+    environment:
+      APP_ENV: prod
+      APP_NAME: CakePHP-Audit-Prod
+      SYSTEM_NAME: cakephp-audit
+      DB_HOST: ${DB_HOST:-10.0.2.30}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-sample_logging_db}
+      DB_USERNAME: ${DB_USERNAME:-cakeuser}
+      DB_PASSWORD: ${DB_PASSWORD:-cakepass}
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-10.0.2.30}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+      LOG_INDEX: audit-prod
+    volumes:
+      - ./app/sample-logging-app:/var/www/html
+      - ./config/prod:/var/www/html/config/local:ro
+      - ./logs/prod:/var/www/html/logs
+    networks:
+      - audit-network
+    restart: unless-stopped
+
+  fluentbit-prod:
+    image: fluent/fluent-bit:3.0
+    container_name: fluentbit-prod
+    volumes:
+      - ./logs/prod:/logs:ro
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./fluent-bit/timestamp.lua:/fluent-bit/etc/timestamp.lua:ro
+    environment:
+      APP_ENV: prod
+      SYSTEM_NAME: cakephp-audit
+      OPENSEARCH_HOST: ${OPENSEARCH_HOST:-10.0.2.30}
+      OPENSEARCH_PORT: ${OPENSEARCH_PORT:-9200}
+    networks:
+      - audit-network
+    depends_on:
+      - app-prod
+    restart: unless-stopped
+
+networks:
+  audit-network:
+    driver: bridge
