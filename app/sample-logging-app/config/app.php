@@ -369,6 +369,15 @@ return [
             'scopes' => false,
             'levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
         ],
+        // Dedicated audit log. AuditLogBehavior writes CRUD records with the
+        // 'audit' scope; this engine routes them (all levels) to audit.json,
+        // which Fluent Bit tails into the logs-audit-* index.
+        'audit' => [
+            'className' => \App\Log\Engine\JsonFileLog::class,
+            'path' => LOGS,
+            'file' => 'audit.json',
+            'scopes' => ['audit'],
+        ],
         // To enable this dedicated query log, you need set your datasource's log flag to true
         'queries' => [
             'className' => FileLog::class,
