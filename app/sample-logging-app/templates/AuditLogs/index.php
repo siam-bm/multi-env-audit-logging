@@ -97,17 +97,29 @@ $badge = function (string $action): string {
     </div>
 
     <!-- Flow pickers -->
-    <div style="width:260px">
+    <div style="width:280px">
+        <p style="font-size:12px;color:#999;margin:0 0 10px">
+            Each flow can be read two ways — <strong>DB</strong> (MySQL <code>audit_logs</code>)
+            or <strong>OS</strong> (live from OpenSearch, shows the query used).
+        </p>
         <h4>👤 User flows</h4>
         <ul style="list-style:none;margin-left:0">
             <?php foreach ($users as $u) : ?>
-                <li><a href="<?= $this->Url->build(['action' => 'userFlow', $u->id]) ?>"><?= h($u->name) ?></a></li>
+                <li>
+                    <?= h($u->name) ?> —
+                    <a href="<?= $this->Url->build(['action' => 'userFlow', $u->id]) ?>">DB</a> ·
+                    <a href="<?= $this->Url->build(['action' => 'userFlowOs', $u->id]) ?>">OS</a>
+                </li>
             <?php endforeach; ?>
         </ul>
         <h4 style="margin-top:20px">📦 Product flows</h4>
         <ul style="list-style:none;margin-left:0">
             <?php foreach ($products as $p) : ?>
-                <li><a href="<?= $this->Url->build(['action' => 'productFlow', $p->id]) ?>"><?= h($p->name) ?> (#<?= $p->id ?>)</a></li>
+                <li>
+                    <?= h($p->name) ?> (#<?= $p->id ?>) —
+                    <a href="<?= $this->Url->build(['action' => 'productFlow', $p->id]) ?>">DB</a> ·
+                    <a href="<?= $this->Url->build(['action' => 'productFlowOs', $p->id]) ?>">OS</a>
+                </li>
             <?php endforeach; ?>
         </ul>
     </div>
