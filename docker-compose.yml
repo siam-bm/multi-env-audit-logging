@@ -14,6 +14,7 @@ services:
       - "8081:80"
     environment:
       APP_ENV: dev
+      DEBUG: "false"
       APP_NAME: CakePHP-Audit-Dev
       SYSTEM_NAME: cakephp-audit
       DB_HOST: ${DB_HOST:-10.0.2.30}
