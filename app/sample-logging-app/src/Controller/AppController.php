@@ -60,6 +60,11 @@ class AppController extends Controller
         // Publish the actor so models (AuditLogBehavior) can record who acted.
         Configure::write('Audit.actor', $user);
 
+        // Publish the session id — the "maintained id" that ties together every
+        // action in one login session (spans many requests). AuditLogBehavior
+        // stamps it on each log line so a whole session can be reconstructed.
+        Configure::write('Audit.session_id', $this->getRequest()->getSession()->id());
+
         // Make it available to every template (nav bar etc.).
         $this->set('currentUser', $user);
     }

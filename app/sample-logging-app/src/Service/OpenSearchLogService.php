@@ -161,4 +161,26 @@ class OpenSearchLogService
 
         return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
     }
+
+    /**
+     * The full flow of ONE login session, stitched by session_id.
+     * A session spans many requests; the id is stamped on every line, so this
+     * returns everything that user did during that session across servers.
+     *
+     * @param string $sessionId Session id.
+     * @param string $index Index pattern.
+     * @return array{index:string, query:array, events:array}
+     */
+    public function sessionFlow(string $sessionId, string $index = 'logs-audit-dev-*'): array
+    {
+        $query = [
+            'size' => 500,
+            'sort' => [['@timestamp' => 'asc']],
+            'query' => ['bool' => ['filter' => [
+                ['term' => ['session_id.keyword' => $sessionId]],
+            ]]],
+        ];
+
+        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+    }
 }

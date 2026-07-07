@@ -101,6 +101,28 @@ class AuditLogsController extends AppController
     }
 
     /**
+     * View D — the full flow of ONE login session, stitched by session_id.
+     * A session spans many requests; this is the "everything in this session"
+     * view, the same-id-across-servers idea at session granularity.
+     * URL: /audit-logs/session-flow-os?session=<id>  (add &format=json for raw).
+     *
+     * @return \Cake\Http\Response|null|void
+     */
+    public function sessionFlowOs()
+    {
+        $sessionId = (string)$this->request->getQuery('session');
+        $result = (new \App\Service\OpenSearchLogService())->sessionFlow($sessionId);
+
+        return $this->renderFlow($result, [
+            'title' => '🧾 Session flow · session_id ' . $sessionId,
+            'subtitle' => 'Everything done in this login session, oldest first — read live from OpenSearch',
+            'filterKey' => 'session_id',
+            'filterValue' => $sessionId,
+            'jsonMeta' => ['source' => 'opensearch', 'session_id' => $sessionId],
+        ]);
+    }
+
+    /**
      * Shared render/JSON path for the OpenSearch flow views.
      *
      * @param array $result Service result ({index, query, events}).

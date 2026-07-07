@@ -112,6 +112,9 @@ $kql = $filterKey . ':' . $filterValue;
                 index <code><?= h($e['_index'] ?? '?') ?></code>
                 <?php if (!empty($e['environment'])) : ?> · env <?= h($e['environment']) ?><?php endif; ?>
                 <?php if (!empty($e['host'])) : ?> · host <?= h($e['host']) ?><?php endif; ?>
+                <?php if (!empty($e['session_id'])) : ?>
+                    · session <a href="<?= $this->Url->build(['action' => 'sessionFlowOs', '?' => ['session' => $e['session_id']]]) ?>"><?= h($e['session_id']) ?></a>
+                <?php endif; ?>
                 <?php if (!empty($e['trace_id'])) : ?>
                     · trace <a href="<?= $this->Url->build(['action' => 'traceFlowOs', '?' => ['trace' => $e['trace_id']]]) ?>"><?= h($e['trace_id']) ?></a>
                 <?php endif; ?>

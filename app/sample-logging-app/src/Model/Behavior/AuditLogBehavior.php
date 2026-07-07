@@ -76,6 +76,18 @@ class AuditLogBehavior extends Behavior
     }
 
     /**
+     * The current login session id (published by AppController::beforeFilter).
+     * This is the "maintained id" that stitches a whole session's actions
+     * together across requests/servers. Null for CLI/console context.
+     *
+     * @return string|null
+     */
+    private function sessionId(): ?string
+    {
+        return Configure::read('Audit.session_id');
+    }
+
+    /**
      * Build the request metadata block.
      *
      * @return array
@@ -114,6 +126,7 @@ class AuditLogBehavior extends Behavior
 
         $logData = [
             'trace_id' => $this->traceId,
+            'session_id' => $this->sessionId(),
             'action' => "{$tableName}.{$action}.attempt",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
@@ -167,6 +180,7 @@ class AuditLogBehavior extends Behavior
 
         $logData = [
             'trace_id' => $this->traceId,
+            'session_id' => $this->sessionId(),
             'action' => "{$tableName}.{$action}.success",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
@@ -221,6 +235,7 @@ class AuditLogBehavior extends Behavior
 
         $logData = [
             'trace_id' => $this->traceId,
+            'session_id' => $this->sessionId(),
             'action' => "{$tableName}.delete.attempt",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
@@ -256,6 +271,7 @@ class AuditLogBehavior extends Behavior
 
         $logData = [
             'trace_id' => $this->traceId,
+            'session_id' => $this->sessionId(),
             'action' => "{$tableName}.delete.success",
             'table' => $tableName,
             'entity_type' => $table->getAlias(),
@@ -299,6 +315,7 @@ class AuditLogBehavior extends Behavior
 
             $entity = $auditLogs->newEntity([
                 'trace_id' => $this->traceId,
+            'session_id' => $this->sessionId(),
                 'action' => $row['action'],
                 'table_name' => $row['table_name'],
                 'entity_id' => $row['entity_id'] ?? null,
