@@ -51,6 +51,33 @@ class OpenSearchLogService
     }
 
     /**
+     * Recent activity feed (newest first), with optional user_id / action filters.
+     *
+     * @param array $filters {user_id?: int|string, action?: string}
+     * @param int $size Max events.
+     * @param string $index Index pattern.
+     * @return array{index:string, query:array, events:array}
+     */
+    public function recentEvents(array $filters = [], int $size = 50, string $index = 'logs-audit-dev-*'): array
+    {
+        $must = [];
+        if (!empty($filters['user_id'])) {
+            $must[] = ['term' => ['user_id' => (int)$filters['user_id']]];
+        }
+        if (!empty($filters['action'])) {
+            $must[] = ['match' => ['action' => $filters['action']]];
+        }
+
+        $query = [
+            'size' => $size,
+            'sort' => [['@timestamp' => 'desc']],
+            'query' => $must ? ['bool' => ['filter' => $must]] : ['match_all' => (object)[]],
+        ];
+
+        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+    }
+
+    /**
      * View A — everything one user did, in chronological order.
      * Returns the index, the exact Query DSL used, and the matching events
      * (so a view can show HOW the data was fetched, not just the result).
