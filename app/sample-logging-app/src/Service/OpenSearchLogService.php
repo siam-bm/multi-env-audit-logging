@@ -47,7 +47,23 @@ class OpenSearchLogService
         $data = $response->getJson() ?? [];
         $hits = $data['hits']['hits'] ?? [];
 
-        return array_map(fn ($hit) => $hit['_source'], $hits);
+        // Keep the EXACT index each doc lives in (e.g. logs-audit-dev-2026.07.07)
+        // alongside the source fields, so the view can show it.
+        return array_map(
+            fn ($hit) => ['_index' => $hit['_index'] ?? ''] + ($hit['_source'] ?? []),
+            $hits
+        );
+    }
+
+    /**
+     * Distinct exact index names present in a result set (for display).
+     *
+     * @param array $events Events from search().
+     * @return array
+     */
+    public function indicesUsed(array $events): array
+    {
+        return array_values(array_unique(array_filter(array_column($events, '_index'))));
     }
 
     /**
@@ -115,6 +131,31 @@ class OpenSearchLogService
             'query' => ['bool' => ['filter' => [
                 ['term' => ['entity_id' => $entityId]],
                 ['match' => ['table' => $table]],
+            ]]],
+        ];
+
+        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+    }
+
+    /**
+     * The full flow of ONE request/operation, stitched by its correlation id.
+     * This is the cross-process/cross-server view: every process writes to the
+     * same index and stamps the same trace_id, so filtering by that one id
+     * returns the whole flow regardless of which server produced each line.
+     * (In RGS this id becomes request_id, propagated through RabbitMQ.)
+     *
+     * @param string $traceId Correlation id.
+     * @param string $index Index pattern.
+     * @return array{index:string, query:array, events:array}
+     */
+    public function traceFlow(string $traceId, string $index = 'logs-audit-dev-*'): array
+    {
+        $query = [
+            'size' => 200,
+            'sort' => [['@timestamp' => 'asc']],
+            // .keyword = exact match on the whole id (the text field would tokenize it).
+            'query' => ['bool' => ['filter' => [
+                ['term' => ['trace_id.keyword' => $traceId]],
             ]]],
         ];
 

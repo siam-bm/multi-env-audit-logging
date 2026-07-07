@@ -48,22 +48,17 @@ class AuditLogsController extends AppController
     {
         $result = (new \App\Service\OpenSearchLogService())->userFlow((int)$userId);
 
-        if ($this->request->getQuery('format') === 'json') {
-            return $this->asJson($result, ['source' => 'opensearch', 'user_id' => (int)$userId]);
-        }
-
-        $this->set([
-            'title' => '👤 User flow #' . (int)$userId,
-            'subtitle' => 'Read live from OpenSearch — everything user #' . (int)$userId . ' did, oldest first',
-            'index' => $result['index'],
-            'query' => $result['query'],
-            'events' => $result['events'],
+        return $this->renderFlow($result, [
+            'title' => '👤 User flow · user_id ' . (int)$userId,
+            'subtitle' => 'Everything user #' . (int)$userId . ' did, oldest first — read live from OpenSearch',
+            'filterKey' => 'user_id',
+            'filterValue' => (int)$userId,
+            'jsonMeta' => ['source' => 'opensearch', 'user_id' => (int)$userId],
         ]);
-        $this->render('os_flow');
     }
 
     /**
-     * View B read DIRECTLY from OpenSearch (not the DB) — the life of one product.
+     * View B read DIRECTLY from OpenSearch — the life of one product.
      * URL: /audit-logs/product-flow-os/2  (add ?format=json for the raw payload).
      *
      * @param string|null $id Product id.
@@ -73,36 +68,69 @@ class AuditLogsController extends AppController
     {
         $result = (new \App\Service\OpenSearchLogService())->entityFlow('products', (int)$id);
 
+        return $this->renderFlow($result, [
+            'title' => '📦 Product flow · entity_id ' . (int)$id,
+            'subtitle' => 'Everything that happened to product #' . (int)$id . ', and who did it — read live from OpenSearch',
+            'filterKey' => 'entity_id',
+            'filterValue' => (int)$id,
+            'jsonMeta' => ['source' => 'opensearch', 'table' => 'products', 'entity_id' => (int)$id],
+        ]);
+    }
+
+    /**
+     * View C — the full flow of ONE request/operation, stitched by its
+     * correlation id (trace_id). This is the cross-process / cross-server view:
+     * every process writes to the SAME index and stamps the SAME id, so one
+     * filter returns the whole flow no matter which server produced each line.
+     * URL: /audit-logs/trace-flow-os?trace=<id>  (add &format=json for raw).
+     *
+     * @return \Cake\Http\Response|null|void
+     */
+    public function traceFlowOs()
+    {
+        $traceId = (string)$this->request->getQuery('trace');
+        $result = (new \App\Service\OpenSearchLogService())->traceFlow($traceId);
+
+        return $this->renderFlow($result, [
+            'title' => '🔗 Request trace · trace_id ' . $traceId,
+            'subtitle' => 'Every log line sharing this one id — the same-id-across-servers view',
+            'filterKey' => 'trace_id',
+            'filterValue' => $traceId,
+            'jsonMeta' => ['source' => 'opensearch', 'trace_id' => $traceId],
+        ]);
+    }
+
+    /**
+     * Shared render/JSON path for the OpenSearch flow views.
+     *
+     * @param array $result Service result ({index, query, events}).
+     * @param array $opts {title, subtitle, filterKey, filterValue, jsonMeta}.
+     * @return \Cake\Http\Response|null|void
+     */
+    private function renderFlow(array $result, array $opts)
+    {
         if ($this->request->getQuery('format') === 'json') {
-            return $this->asJson($result, ['source' => 'opensearch', 'table' => 'products', 'entity_id' => (int)$id]);
+            return $this->response
+                ->withType('application/json')
+                ->withStringBody(json_encode($opts['jsonMeta'] + [
+                    'index_pattern' => $result['index'],
+                    'query' => $result['query'],
+                    'count' => count($result['events']),
+                    'events' => $result['events'],
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         }
 
+        $service = new \App\Service\OpenSearchLogService();
         $this->set([
-            'title' => '📦 Product flow #' . (int)$id,
-            'subtitle' => 'Read live from OpenSearch — everything that happened to product #' . (int)$id . ', and who did it',
-            'index' => $result['index'],
+            'title' => $opts['title'],
+            'subtitle' => $opts['subtitle'],
+            'indexPattern' => $result['index'],
+            'indicesUsed' => $service->indicesUsed($result['events']),
+            'filterKey' => $opts['filterKey'],
+            'filterValue' => $opts['filterValue'],
             'query' => $result['query'],
             'events' => $result['events'],
         ]);
         $this->render('os_flow');
-    }
-
-    /**
-     * Build a pretty-printed JSON response from a service result.
-     *
-     * @param array $result Service result ({index, query, events}).
-     * @param array $meta Extra top-level fields.
-     * @return \Cake\Http\Response
-     */
-    private function asJson(array $result, array $meta): \Cake\Http\Response
-    {
-        return $this->response
-            ->withType('application/json')
-            ->withStringBody(json_encode($meta + [
-                'index' => $result['index'],
-                'query' => $result['query'],
-                'count' => count($result['events']),
-                'events' => $result['events'],
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 }
