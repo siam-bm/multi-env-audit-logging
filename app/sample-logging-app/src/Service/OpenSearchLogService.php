@@ -15,17 +15,22 @@ use Cake\Http\Client;
  *
  * Uses CakePHP's core Http\Client so no extra composer dependency is needed.
  * (In a production app you'd use opensearch-project/opensearch-php.)
+ *
+ * The index pattern is read from OPENSEARCH_LOG_INDEX so the same code serves
+ * dev / staging / prod without edits.
  */
 class OpenSearchLogService
 {
     private Client $http;
     private string $base;
+    private string $indexPattern;
 
     public function __construct()
     {
         $host = env('OPENSEARCH_HOST', '10.0.2.30');
         $port = env('OPENSEARCH_PORT', '9200');
         $this->base = "http://{$host}:{$port}";
+        $this->indexPattern = (string)env('OPENSEARCH_LOG_INDEX', 'logs-audit-dev-*');
         $this->http = new Client(['timeout' => 10]);
     }
 
@@ -71,10 +76,9 @@ class OpenSearchLogService
      *
      * @param array $filters {user_id?: int|string, action?: string}
      * @param int $size Max events.
-     * @param string $index Index pattern.
      * @return array{index:string, query:array, events:array}
      */
-    public function recentEvents(array $filters = [], int $size = 50, string $index = 'logs-audit-dev-*'): array
+    public function recentEvents(array $filters = [], int $size = 50): array
     {
         $must = [];
         if (!empty($filters['user_id'])) {
@@ -90,7 +94,7 @@ class OpenSearchLogService
             'query' => $must ? ['bool' => ['filter' => $must]] : ['match_all' => (object)[]],
         ];
 
-        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+        return ['index' => $this->indexPattern, 'query' => $query, 'events' => $this->search($this->indexPattern, $query)];
     }
 
     /**
@@ -99,10 +103,9 @@ class OpenSearchLogService
      * (so a view can show HOW the data was fetched, not just the result).
      *
      * @param int $userId User id.
-     * @param string $index Index pattern.
      * @return array{index:string, query:array, events:array}
      */
-    public function userFlow(int $userId, string $index = 'logs-audit-dev-*'): array
+    public function userFlow(int $userId): array
     {
         $query = [
             'size' => 200,
@@ -112,7 +115,7 @@ class OpenSearchLogService
             ]]],
         ];
 
-        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+        return ['index' => $this->indexPattern, 'query' => $query, 'events' => $this->search($this->indexPattern, $query)];
     }
 
     /**
@@ -120,10 +123,9 @@ class OpenSearchLogService
      *
      * @param string $table Table name, e.g. "products".
      * @param int $entityId Entity id.
-     * @param string $index Index pattern.
      * @return array{index:string, query:array, events:array}
      */
-    public function entityFlow(string $table, int $entityId, string $index = 'logs-audit-dev-*'): array
+    public function entityFlow(string $table, int $entityId): array
     {
         $query = [
             'size' => 200,
@@ -134,7 +136,7 @@ class OpenSearchLogService
             ]]],
         ];
 
-        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+        return ['index' => $this->indexPattern, 'query' => $query, 'events' => $this->search($this->indexPattern, $query)];
     }
 
     /**
@@ -145,10 +147,9 @@ class OpenSearchLogService
      * (In RGS this id becomes request_id, propagated through RabbitMQ.)
      *
      * @param string $traceId Correlation id.
-     * @param string $index Index pattern.
      * @return array{index:string, query:array, events:array}
      */
-    public function traceFlow(string $traceId, string $index = 'logs-audit-dev-*'): array
+    public function traceFlow(string $traceId): array
     {
         $query = [
             'size' => 200,
@@ -159,7 +160,7 @@ class OpenSearchLogService
             ]]],
         ];
 
-        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+        return ['index' => $this->indexPattern, 'query' => $query, 'events' => $this->search($this->indexPattern, $query)];
     }
 
     /**
@@ -168,10 +169,9 @@ class OpenSearchLogService
      * returns everything that user did during that session across servers.
      *
      * @param string $sessionId Session id.
-     * @param string $index Index pattern.
      * @return array{index:string, query:array, events:array}
      */
-    public function sessionFlow(string $sessionId, string $index = 'logs-audit-dev-*'): array
+    public function sessionFlow(string $sessionId): array
     {
         $query = [
             'size' => 500,
@@ -181,6 +181,6 @@ class OpenSearchLogService
             ]]],
         ];
 
-        return ['index' => $index, 'query' => $query, 'events' => $this->search($index, $query)];
+        return ['index' => $this->indexPattern, 'query' => $query, 'events' => $this->search($this->indexPattern, $query)];
     }
 }
