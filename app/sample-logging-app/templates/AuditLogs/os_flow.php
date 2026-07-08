@@ -15,6 +15,9 @@
  */
 $prettyQuery = json_encode($query, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 $kql = $filterKey . ':' . $filterValue;
+// Long ids (32–64 char session ids) clutter the line — show a short form,
+// full id on hover.
+$shortId = fn ($id) => strlen((string)$id) > 16 ? substr((string)$id, 0, 12) . '…' : (string)$id;
 ?>
 <p><a href="<?= $this->Url->build(['action' => 'index']) ?>">&laquo; Back to audit trail</a></p>
 <h2 style="margin-bottom:2px"><?= h($title) ?></h2>
@@ -113,10 +116,10 @@ $kql = $filterKey . ':' . $filterValue;
                 <?php if (!empty($e['environment'])) : ?> · env <?= h($e['environment']) ?><?php endif; ?>
                 <?php if (!empty($e['host'])) : ?> · host <?= h($e['host']) ?><?php endif; ?>
                 <?php if (!empty($e['session_id'])) : ?>
-                    · session <a href="<?= $this->Url->build(['action' => 'sessionFlowOs', '?' => ['session' => $e['session_id']]]) ?>"><?= h($e['session_id']) ?></a>
+                    · session <a title="<?= h($e['session_id']) ?>" href="<?= $this->Url->build(['action' => 'sessionFlowOs', '?' => ['session' => $e['session_id']]]) ?>"><?= h($shortId($e['session_id'])) ?></a>
                 <?php endif; ?>
                 <?php if (!empty($e['trace_id'])) : ?>
-                    · trace <a href="<?= $this->Url->build(['action' => 'traceFlowOs', '?' => ['trace' => $e['trace_id']]]) ?>"><?= h($e['trace_id']) ?></a>
+                    · trace <a title="<?= h($e['trace_id']) ?>" href="<?= $this->Url->build(['action' => 'traceFlowOs', '?' => ['trace' => $e['trace_id']]]) ?>"><?= h($shortId($e['trace_id'])) ?></a>
                 <?php endif; ?>
             </div>
         </div>
