@@ -66,6 +66,9 @@ $prettyQuery = json_encode($query, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
                 <?php else : ?>
                     <em style="color:#999">system</em>
                 <?php endif; ?>
+                <?php if (!empty($e['session_id'])) : ?>
+                    <div style="font-size:11px"><a title="<?= h($e['session_id']) ?>" href="<?= $this->Url->build(['action' => 'sessionFlowOs', '?' => ['session' => $e['session_id']]]) ?>">session ↗</a></div>
+                <?php endif; ?>
             </td>
             <td><?= $badge($act) ?></td>
             <td style="font-size:13px">
