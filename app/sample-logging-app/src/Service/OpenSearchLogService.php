@@ -43,13 +43,27 @@ class OpenSearchLogService
      */
     public function search(string $index, array $body): array
     {
-        $response = $this->http->post(
-            "{$this->base}/{$index}/_search",
-            json_encode($body),
-            ['type' => 'json']
-        );
+        try {
+            $response = $this->http->post(
+                "{$this->base}/{$index}/_search",
+                json_encode($body),
+                ['type' => 'json']
+            );
 
-        $data = $response->getJson() ?? [];
+            if (!$response->isOk()) {
+                \Cake\Log\Log::warning("OpenSearch search on {$index} returned HTTP " . $response->getStatusCode());
+
+                return [];
+            }
+
+            $data = $response->getJson() ?? [];
+        } catch (\Throwable $e) {
+            // OpenSearch unreachable/timed out — degrade gracefully instead of a 500.
+            \Cake\Log\Log::error('OpenSearch unreachable: ' . $e->getMessage());
+
+            return [];
+        }
+
         $hits = $data['hits']['hits'] ?? [];
 
         // Keep the EXACT index each doc lives in (e.g. logs-audit-dev-2026.07.07)
