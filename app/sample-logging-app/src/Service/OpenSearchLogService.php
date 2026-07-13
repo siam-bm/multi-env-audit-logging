@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Service\FieldCipher;
 use Cake\Http\Client;
 
 /**
@@ -67,9 +68,13 @@ class OpenSearchLogService
         $hits = $data['hits']['hits'] ?? [];
 
         // Keep the EXACT index each doc lives in (e.g. logs-audit-dev-2026.07.07)
-        // alongside the source fields, so the view can show it.
+        // alongside the source fields, so the view can show it. Encrypted
+        // fields ("enc:v1:...") are decrypted here — OpenSearch stores only
+        // ciphertext; plaintext exists only app-side (FieldCipher + key).
         return array_map(
-            fn ($hit) => ['_index' => $hit['_index'] ?? ''] + ($hit['_source'] ?? []),
+            fn ($hit) => FieldCipher::decryptFields(
+                ['_index' => $hit['_index'] ?? ''] + ($hit['_source'] ?? [])
+            ),
             $hits
         );
     }
