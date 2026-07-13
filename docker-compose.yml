@@ -17,6 +17,7 @@ services:
       DEBUG: "false"
       APP_NAME: CakePHP-Audit-Dev
       SYSTEM_NAME: cakephp-audit
+      LOG_ENCRYPT_KEY: ${LOG_ENCRYPT_KEY:-poc-demo-key-change-me}
       DB_HOST: ${DB_HOST:-10.0.2.30}
       DB_PORT: ${DB_PORT:-3306}
       DB_DATABASE: ${DB_DATABASE:-sample_logging_db}
