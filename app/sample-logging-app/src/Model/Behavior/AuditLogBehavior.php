@@ -28,6 +28,9 @@ class AuditLogBehavior extends Behavior
         'logScopes' => ['audit', 'application'],
         'fields' => [],
         'ignoreFields' => ['created', 'modified', 'id', 'password'],
+        // Sensitive fields encrypted BEFORE the line is written — OpenSearch
+        // only ever stores ciphertext; the app decrypts on read (FieldCipher).
+        'encryptFields' => ['email', 'description'],
         'logLevel' => 'info',
         'includeRequestData' => true,
         'includeSchema' => false,
@@ -85,6 +88,25 @@ class AuditLogBehavior extends Behavior
     private function sessionId(): ?string
     {
         return Configure::read('Audit.session_id');
+    }
+
+    /**
+     * Encrypt the configured sensitive fields, then write the audit line.
+     * OpenSearch receives ciphertext for those fields; everything else
+     * (ids, action, timestamps) stays plaintext so flows remain searchable.
+     *
+     * @param string $level Log level.
+     * @param array $logData Payload.
+     * @return void
+     */
+    private function writeLog(string $level, array $logData): void
+    {
+        $sensitive = (array)$this->getConfig('encryptFields');
+        if ($sensitive) {
+            $logData = \App\Service\FieldCipher::encryptFields($logData, $sensitive);
+        }
+
+        Log::write($level, json_encode($logData), $this->getConfig('logScopes'));
     }
 
     /**
@@ -158,7 +180,7 @@ class AuditLogBehavior extends Behavior
             $logData['request'] = $request;
         }
 
-        Log::write($this->getConfig('logLevel'), json_encode($logData), $this->getConfig('logScopes'));
+        $this->writeLog($this->getConfig('logLevel'), $logData);
     }
 
     /**
@@ -206,7 +228,7 @@ class AuditLogBehavior extends Behavior
         }
 
         $level = $wasNew ? 'info' : 'notice';
-        Log::write($level, json_encode($logData), $this->getConfig('logScopes'));
+        $this->writeLog($level, $logData);
 
         $this->recordToDatabase([
             'action' => "{$tableName}.{$action}",
@@ -251,7 +273,7 @@ class AuditLogBehavior extends Behavior
             $logData['request'] = $request;
         }
 
-        Log::warning(json_encode($logData), $this->getConfig('logScopes'));
+        $this->writeLog('warning', $logData);
     }
 
     /**
@@ -288,7 +310,7 @@ class AuditLogBehavior extends Behavior
             $logData['request'] = $request;
         }
 
-        Log::warning(json_encode($logData), $this->getConfig('logScopes'));
+        $this->writeLog('warning', $logData);
 
         $this->recordToDatabase([
             'action' => "{$tableName}.delete",
