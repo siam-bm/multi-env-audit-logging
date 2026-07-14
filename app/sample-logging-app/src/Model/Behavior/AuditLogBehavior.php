@@ -30,6 +30,8 @@ class AuditLogBehavior extends Behavior
         'ignoreFields' => ['created', 'modified', 'id', 'password'],
         // Sensitive fields encrypted BEFORE the line is written — OpenSearch
         // only ever stores ciphertext; the app decrypts on read (FieldCipher).
+        // Managed at runtime via EncryptFieldsRegistry (config/encrypt_fields.json,
+        // editable on the /encryption-fields page); this is only the fallback.
         'encryptFields' => ['email', 'description'],
         'logLevel' => 'info',
         'includeRequestData' => true,
@@ -57,6 +59,12 @@ class AuditLogBehavior extends Behavior
         parent::initialize($config);
 
         $this->traceId = uniqid('audit_', true);
+
+        // The encrypted-field list is runtime-managed (config/encrypt_fields.json
+        // via the /encryption-fields page) unless a table passed its own list.
+        if (!isset($config['encryptFields'])) {
+            $this->setConfig('encryptFields', \App\Service\EncryptFieldsRegistry::list(), false);
+        }
 
         if (class_exists('\Cake\Http\ServerRequestFactory')) {
             $this->request = \Cake\Http\ServerRequestFactory::fromGlobals();
