@@ -60,6 +60,14 @@ class JsonFileLog extends FileLog
             $logData['context'] = $context;
         }
 
+        // Encrypt the registered sensitive fields in THIS envelope too (the
+        // audit behavior encrypts its own payload, but request.ip/user_agent
+        // and controller context are added here and would otherwise leak).
+        $sensitive = \App\Service\EncryptFieldsRegistry::list();
+        if ($sensitive) {
+            $logData = \App\Service\FieldCipher::encryptFields($logData, $sensitive);
+        }
+
         // Write JSON to file
         $output = json_encode($logData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $filename = $this->_getFilename($level);
